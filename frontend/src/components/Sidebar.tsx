@@ -1,44 +1,82 @@
-import React, { useState } from "react";
-
-type Player = {
-  name: string;
-  color: "Green" | "Orange" | "Blue";
-};
+import React, { useEffect, useState } from "react";
+import { getAllPlayers, addNewPlayer } from "../api";
+import type { Player } from "../types/types";
 
 interface Props {
-  players: Player[];
-  setPlayers: React.Dispatch<React.SetStateAction<Player[]>>;
-  setWaitingList: React.Dispatch<React.SetStateAction<Player[]>>;
+  onAddToWaitingList: (player: Player) => void;
 }
 
-const Sidebar: React.FC<Props> = ({ players, setPlayers, setWaitingList }) => {
+const Sidebar: React.FC<Props> = ({ onAddToWaitingList }) => {
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [name, setName] = useState("");
-  const [color, setColor] = useState<Player["color"]>("Blue");
+  const [color, setColor] = useState<Player["color"]>("Green");
 
-  const addPlayer = () => {
-    const newPlayer: Player = { name, color };
-    const updated = [...players, newPlayer];
-    setPlayers(updated);
-    setWaitingList((prev) => [...prev, newPlayer]);
-    setName("");
+  useEffect(() => {
+    getAllPlayers().then(setAllPlayers);
+  }, []);
+
+  const handleAdd = async () => {
+    const newPlayer = { name, color };
+    try {
+      await addNewPlayer(newPlayer);
+      setAllPlayers((prev) => [...prev, newPlayer]);
+      onAddToWaitingList(newPlayer);
+      setName("");
+    } catch (err) {
+      alert("Name already exists or error occurred.");
+    }
   };
 
   return (
     <div className="w-64 bg-white text-black p-4 shadow-lg">
-      <h2 className="font-bold text-lg mb-4">Add Player</h2>
+      <h2 className="text-lg font-bold mb-4">All Players</h2>
+      <div className="space-y-2 mb-4">
+        {allPlayers.map((player) => (
+            <div key={player.name} className="flex justify-between items-center text-sm">
+                <div className="flex items-center gap-2">
+                <div
+                    className={`w-3 h-3 rounded-full ${
+                    player.color === "Green"
+                        ? "bg-green-500"
+                        : player.color === "Blue"
+                        ? "bg-blue-500"
+                        : "bg-orange-400"
+                    }`}
+                ></div>
+                <span>{player.name}</span>
+                </div>
+                <button
+                className="text-blue-500 text-xs"
+                onClick={() => onAddToWaitingList(player)}
+                >
+                ➕ Add
+                </button>
+            </div>
+        ))}
+      </div>
+
+      <h3 className="text-md font-semibold mt-4">Add New Player</h3>
       <input
-        className="border w-full mb-2 p-1"
-        placeholder="Player name"
+        className="border p-1 w-full mb-1 text-sm"
+        placeholder="Name"
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
-      <select className="w-full mb-2 p-1" value={color} onChange={(e) => setColor(e.target.value as Player["color"])}>
+      <select
+        className="border p-1 w-full mb-2 text-sm"
+        value={color}
+        onChange={(e) => setColor(e.target.value as Player["color"])}
+      >
         <option value="Green">Green</option>
         <option value="Orange">Orange</option>
         <option value="Blue">Blue</option>
       </select>
-      <button onClick={addPlayer} className="w-full bg-blue-600 text-white py-1 rounded">
-        + Add Player
+      <button
+        onClick={handleAdd}
+        className="bg-blue-500 text-white px-2 py-1 text-sm rounded w-full"
+        disabled={name.length < 1}
+      >
+        ➕ Create & Add
       </button>
     </div>
   );

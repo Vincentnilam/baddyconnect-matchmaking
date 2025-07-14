@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import type { Player } from "../types/types";
 import PlayerCard from "./PlayerCard";
 import { useDrop } from "react-dnd";
+import { removePlayerFromWaitingList, updatePlayerColor } from "../api";
 
 interface Props {
   players: Player[];
@@ -19,6 +20,25 @@ const WaitingList: React.FC<Props> = ({ players, movePlayer, removeFromWaitingLi
   }));
   const ref = useRef<HTMLDivElement>(null);
   drop(ref);
+
+  const handleRemove = async (name: string) => {
+    try {
+      await removePlayerFromWaitingList(name);
+      removeFromWaitingList(name);
+    } catch (err) {
+      alert("Failed to delete player.");
+    }
+  };
+
+  const handleColorChange = async (name: string, newColor: Player["color"]) => {
+    try {
+      await updatePlayerColor(name, newColor);
+      onChangeColor(name, newColor);
+    } catch (err) {
+      alert("Failed to update color.");
+    }
+  };
+
   return (
     <div
       ref={ref}
@@ -37,14 +57,14 @@ const WaitingList: React.FC<Props> = ({ players, movePlayer, removeFromWaitingLi
             <select
               className="text-sm border rounded px-1 py-0.5"
               value={player.color}
-              onChange={(e) => onChangeColor(player.name, e.target.value as Player["color"])}
+              onChange={(e) => handleColorChange(player.name, e.target.value as Player["color"])}
             >
               <option value="Green">Green</option>
               <option value="Orange">Orange</option>
               <option value="Blue">Blue</option>
             </select>
             <button
-              onClick={() => removeFromWaitingList(player.name)}
+              onClick={() => handleRemove(player.name)}
               className="text-red-500 hover:text-red-700 text-sm"
               title="Remove player"
             >

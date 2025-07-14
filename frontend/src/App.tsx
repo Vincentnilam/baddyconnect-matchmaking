@@ -1,22 +1,69 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import CourtCard from "./components/CourtCard";
 import WaitingList from "./components/WaitingList";
 import Sidebar from "./components/Sidebar";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import type { Player } from "./types/types";
+import type { Player, Court } from "./types/types";
+import { fetchWaitingList, saveWaitingList, saveCourts, fetchCourts, incrementGamesPlayed } from "./api";
 
 const App: React.FC = () => {
-  const [players, setPlayers] = useState<Player[]>([
-  ]);
-  const [courts, setCourts] = useState<Player[][]>([[]]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [courts, setCourts] = useState<Court[]>([]);
 
-  const assignedNames = new Set(courts.flat().map((p) => p.name));
+  const assignedNames = new Set(courts.flatMap((c) => c.players.map((p) => p.name)));
   const waitingList = players.filter((p) => !assignedNames.has(p.name));
+  const [initialized, setInitialized] = useState(false);
+
+  // First load fetch
+  useEffect(() => {
+    const load = async () => {
+      const list = await fetchWaitingList();
+      setPlayers(list);
+      const loadedCourts = await fetchCourts();
+      // Filter out any malformed courts (e.g., missing court_number or no players array)
+      const validCourts = loadedCourts
+        .filter(court => typeof court.court_number === "number" && Array.isArray(court.players))
+        .map(court => ({
+          court_number: court.court_number,
+          players: court.players.filter(p => p.name), // remove players without names
+        }));
+
+      // If no valid courts found, add an empty one
+      if (validCourts.length === 0) {
+        setCourts([{ court_number: 0, players: [] }]);
+      } else {
+        setCourts(validCourts);
+      }
+      setInitialized(true);
+    };
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (!initialized) return;
+
+    const assigned = new Set(courts.flatMap((court) => court.players.map((p) => p.name)));
+    const unassigned = players.filter((p) => !assigned.has(p.name));
+
+    const uniqueNames = new Set();
+    const unique = unassigned.filter((p) => {
+      if (uniqueNames.has(p.name)) return false;
+      uniqueNames.add(p.name);
+      return true;
+    });
+    saveWaitingList(unique);
+    saveCourts(courts);
+  }, [players, courts, initialized]);
+
 
   const addCourt = () => {
-    setCourts((prev) => [...prev, []]);
+    setCourts((prev) => [
+      ...prev,
+      { court_number: prev.length, players: [] }
+    ]);
   };
+
 
   const removeCourt = (index: number) => {
     setCourts((prev) => {
@@ -29,48 +76,49 @@ const App: React.FC = () => {
   const onFinishCourt = (courtIndex: number) => {
     setCourts((prevCourts) => {
       const newCourts = [...prevCourts];
-      const playersToMove = newCourts[courtIndex];
+      const playersToMove = newCourts[courtIndex].players;
 
-      // Clear the court
-      newCourts[courtIndex] = [];
+      newCourts[courtIndex] = {
+        ...newCourts[courtIndex],
+        players: [],
+      }
 
-      // Add players back to end of waiting list
       setPlayers((prev) => [
         ...prev.filter((p) => !playersToMove.find((cp) => cp.name === p.name)),
         ...playersToMove,
       ]);
-
+      
+      // Increment games played
+      incrementGamesPlayed(playersToMove.map((p) => p.name));
       return newCourts;
     });
+    
   };
-
 
   const movePlayer = (player: Player, toCourtIndex?: number) => {
     setCourts((prevCourts) => {
-      // Remove player from all courts
-      const newCourts = prevCourts.map((court) =>
-        court.filter((p) => p.name !== player.name)
-      );
+      const newCourts = prevCourts.map((court) => ({
+        ...court,
+        players: court.players.filter((p) => p.name !== player.name),
+      }));
 
-      if (toCourtIndex === undefined) {
-        // Move to waiting list — no need to touch courts
-        return newCourts;
-      }
+      if (toCourtIndex === undefined) return newCourts;
 
-      // Enforce max 4
-      if (newCourts[toCourtIndex].length >= 4) return newCourts;
+      if (newCourts[toCourtIndex].players.length >= 4) return newCourts;
 
-      // Add player to new court
-      newCourts[toCourtIndex] = [...newCourts[toCourtIndex], player];
+      newCourts[toCourtIndex] = {
+        ...newCourts[toCourtIndex],
+        players: [...newCourts[toCourtIndex].players, player],
+      };
 
       return newCourts;
     });
 
-    // Move dragged player to the end of the player list (affects waiting list ordering)
+    // Add back to waiting list if removed from court
     if (toCourtIndex === undefined) {
       setPlayers((prevPlayers) => {
-        const withoutPlayer = prevPlayers.filter((p) => p.name !== player.name);
-        return [...withoutPlayer, player]; // add to end
+        const without = prevPlayers.filter((p) => p.name !== player.name);
+        return [...without, player];
       });
     }
   };
@@ -87,14 +135,15 @@ const App: React.FC = () => {
     );
   };
 
-
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="flex min-h-screen bg-gradient-to-r from-purple-700 to-blue-500 text-white">
         <Sidebar
-          players={players}
-          setPlayers={setPlayers}
-          setWaitingList={() => {}}
+          onAddToWaitingList={(player) =>
+            setPlayers((prev) =>
+              prev.find((p) => p.name === player.name) ? prev : [...prev, player]
+            )
+          }
         />
 
         <div className="flex-1 p-6">
@@ -109,11 +158,14 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap gap-4 justify-center mb-8">
-            {courts.map((courtPlayers, i) => {
-              const enrichedPlayers = courtPlayers.map((p) => players.find((gp) => gp.name === p.name)!);
+            {courts.map((court, i) => {
+              const enrichedPlayers = court.players.map((p) =>
+                players.find((gp) => gp.name === p.name) || p
+              );
+
               return (
                 <CourtCard
-                  key={i}
+                  key={court.court_number ?? i}
                   courtIndex={i}
                   players={enrichedPlayers}
                   movePlayer={movePlayer}
@@ -124,11 +176,12 @@ const App: React.FC = () => {
             })}
           </div>
 
-          <WaitingList 
-            players={waitingList} 
+
+          <WaitingList
+            players={waitingList}
             movePlayer={movePlayer}
             removeFromWaitingList={removeFromWaitingList}
-            onChangeColor={onChangeColor} 
+            onChangeColor={onChangeColor}
           />
         </div>
       </div>
