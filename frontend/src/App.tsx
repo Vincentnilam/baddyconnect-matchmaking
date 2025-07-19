@@ -135,6 +135,7 @@ const App: React.FC = () => {
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="flex min-h-screen bg-gradient-to-r from-purple-700 to-blue-500 text-white">
+        {/* Left Sidebar */}
         <Sidebar
           onAddToWaitingList={(player) =>
             setPlayers((prev) =>
@@ -143,6 +144,7 @@ const App: React.FC = () => {
           }
         />
 
+        {/* Main Court Area */}
         <div className="flex-1 p-6">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold">Unity Matchmaker</h1>
@@ -173,8 +175,10 @@ const App: React.FC = () => {
               );
             })}
           </div>
+        </div>
 
-
+        {/* Right Waiting List */}
+        <div className="w-80 p-4">
           <WaitingList
             players={waitingList}
             movePlayer={movePlayer}
@@ -183,6 +187,7 @@ const App: React.FC = () => {
           />
         </div>
       </div>
+
     </DndProvider>
   );
 };
