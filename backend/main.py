@@ -128,7 +128,7 @@ async def save_courts(courts: List[Court]):
     await courts_collection.delete_many({})  # replace all
     data = [
         {
-            "id": court.id,
+            "id": str(court.id),
             "court_number": court.court_number,
             "players": [p.model_dump() for p in court.players]
         }
