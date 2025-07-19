@@ -6,6 +6,7 @@ import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import type { Player, Court } from "./types/types";
 import { fetchWaitingList, saveWaitingList, saveCourts, fetchCourts, incrementGamesPlayed } from "./api";
+import { v4 as uuidv4} from "uuid";
 
 const App: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -25,13 +26,14 @@ const App: React.FC = () => {
       const validCourts = loadedCourts
         .filter(court => typeof court.court_number === "number" && Array.isArray(court.players))
         .map(court => ({
+          id: court.id,
           court_number: court.court_number,
           players: court.players.filter(p => p.name), // remove players without names
         }));
 
       // If no valid courts found, add an empty one
       if (validCourts.length === 0) {
-        setCourts([{ court_number: 0, players: [] }]);
+        setCourts([{ id: uuidv4(), court_number: 0, players: [] }]);
       } else {
         setCourts(validCourts);
       }
@@ -60,68 +62,63 @@ const App: React.FC = () => {
   const addCourt = () => {
     setCourts((prev) => [
       ...prev,
-      { court_number: prev.length, players: [] }
+      { id: uuidv4() ,court_number: prev.length, players: [] }
     ]);
   };
 
 
-  const removeCourt = (index: number) => {
-    setCourts((prev) => {
-      const newCourts = [...prev];
-      newCourts.splice(index, 1);
-      return newCourts;
-    });
+  const removeCourt = (courtId: string) => {
+    setCourts((prev) => prev.filter(c => c.id !== courtId));
   };
 
-  const onFinishCourt = (courtIndex: number) => {
+
+  const onFinishCourt = (courtId: string) => {
     setCourts((prevCourts) => {
-      const newCourts = [...prevCourts];
-      const playersToMove = newCourts[courtIndex].players;
+      const newCourts = prevCourts.map((court) => {
+        if (court.id !== courtId) return court;
 
-      newCourts[courtIndex] = {
-        ...newCourts[courtIndex],
-        players: [],
-      }
+        const playersToMove = court.players;
 
-      setPlayers((prev) => [
-        ...prev.filter((p) => !playersToMove.find((cp) => cp.name === p.name)),
-        ...playersToMove,
-      ]);
-      
-      // Increment games played
-      incrementGamesPlayed(playersToMove.map((p) => p.name));
+        // Move players back to waiting list
+        setPlayers((prev) => [
+          ...prev.filter((p) => !playersToMove.find((cp) => cp.name === p.name)),
+          ...playersToMove,
+        ]);
+
+        incrementGamesPlayed(playersToMove.map((p) => p.name));
+
+        return { ...court, players: [] };
+      });
+
       return newCourts;
     });
-    
-  };
+};
 
-  const movePlayer = (player: Player, toCourtIndex?: number) => {
+
+  const movePlayer = (player: Player, toCourtId?: string) => {
     setCourts((prevCourts) => {
-      const newCourts = prevCourts.map((court) => ({
+      let updatedCourts = prevCourts.map((court) => ({
         ...court,
         players: court.players.filter((p) => p.name !== player.name),
       }));
 
-      if (toCourtIndex === undefined) return newCourts;
+      if (!toCourtId) return updatedCourts;
 
-      if (newCourts[toCourtIndex].players.length >= 4) return newCourts;
+      const court = updatedCourts.find((c) => c.id === toCourtId);
+      if (!court || court.players.length >= 4) return updatedCourts;
 
-      newCourts[toCourtIndex] = {
-        ...newCourts[toCourtIndex],
-        players: [...newCourts[toCourtIndex].players, player],
-      };
-
-      return newCourts;
+      court.players.push(player);
+      return [...updatedCourts];
     });
 
-    // Add back to waiting list if removed from court
-    if (toCourtIndex === undefined) {
+    if (!toCourtId) {
       setPlayers((prevPlayers) => {
         const without = prevPlayers.filter((p) => p.name !== player.name);
         return [...without, player];
       });
     }
   };
+
 
   const removeFromWaitingList = (playerName: string) => {
     setPlayers((prev) => prev.filter((p) => p.name !== playerName));
@@ -165,7 +162,8 @@ const App: React.FC = () => {
 
               return (
                 <CourtCard
-                  key={court.court_number ?? i}
+                  key={court.id}
+                  courtId={court.id}
                   courtIndex={i}
                   players={enrichedPlayers}
                   movePlayer={movePlayer}

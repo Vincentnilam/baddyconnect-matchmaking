@@ -128,10 +128,11 @@ async def save_courts(courts: List[Court]):
     await courts_collection.delete_many({})  # replace all
     data = [
         {
-            "court_number": i,
+            "id": court.id,
+            "court_number": court.court_number,
             "players": [p.model_dump() for p in court.players]
         }
-        for i, court in enumerate(courts)
+        for court in courts
     ]
     if data:
         result = await courts_collection.insert_many(data)
@@ -143,7 +144,7 @@ async def get_courts():
     cursor = courts_collection.find().sort("court_number", 1)
     courts = await cursor.to_list(length=None)
     for c in courts:
-        c["_id"] = str(c["_id"])
+        c["_id"] = str(c["_id"])  # keep or remove as needed
     return courts
 
 @app.post("/increment-games-played")

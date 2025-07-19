@@ -5,6 +5,7 @@ export type Player = {
 };
 
 export type Court = {
+  id: string;
   court_number: number;
   players: Player[];
 };

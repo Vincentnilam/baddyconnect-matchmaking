@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Literal
 from typing import List
+from uuid import UUID
 
 class Player(BaseModel):
     name: str
@@ -8,8 +9,9 @@ class Player(BaseModel):
     games_played: int = 0
 
 class Court(BaseModel):
+    id: UUID
     court_number: int
-    players: list[Player]
+    players: List[Player]
 
     class Config:
         orm_mode = True

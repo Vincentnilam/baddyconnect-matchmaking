@@ -6,7 +6,7 @@ import { removePlayerFromWaitingList, updatePlayerColor } from "../api";
 
 interface Props {
   players: Player[];
-  movePlayer: (player: Player, toCourtIndex?: number) => void;
+  movePlayer: (player: Player, toCourtId?: string) => void;
   removeFromWaitingList: (playerName: string) => void;
   onChangeColor: (playerName: string, newColor: Player["color"]) => void;
 }
