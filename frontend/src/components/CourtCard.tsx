@@ -65,7 +65,8 @@ const CourtCard: React.FC<CourtCardProps> = ({
   return (
     <div
       ref={ref}
-      className={`bg-white text-black p-4 rounded shadow w-60 min-h-[180px] border-2 ${borderColor} relative`}
+      className={`bg-white text-black p-4 rounded shadow w-full min-w-[200px] max-w-sm min-h-[180px] border-2 ${borderColor} relative`}
+
     >
       <button
         onClick={() => removeCourt(courtId)}
