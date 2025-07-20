@@ -1,7 +1,7 @@
 import React , { useRef } from "react";
 import { useDrop } from "react-dnd";
 import PlayerCard from "./PlayerCard";
-import type { Player } from "../types/types";
+import type { Player, Preset } from "../types/types";
 
 interface CourtCardProps {
   courtId: string;
@@ -10,6 +10,7 @@ interface CourtCardProps {
   movePlayer: (player: Player, toCourtId: string) => void;
   removeCourt: (id: string) => void;
   onFinishCourt: (courtId: string) => void;
+  removePreset: (presetId: string) => void;
 }
 
 const CourtCard: React.FC<CourtCardProps> = ({
@@ -19,19 +20,38 @@ const CourtCard: React.FC<CourtCardProps> = ({
   movePlayer,
   removeCourt,
   onFinishCourt,
+  removePreset,
 }) => {
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
-    accept: "PLAYER",
-    canDrop: () => players.length < 4,
-    drop: (item: { player: Player }) => {
-      if (players.find(p => p.name === item.player.name)) return;
-      movePlayer(item.player, courtId);
+    accept: ["PLAYER", "PRESET"],
+    canDrop: (item: any) => {
+      if (item.player) return players.length < 4;
+      if (item.preset) return players.length + item.preset.players.length <= 4;
+      return false;
+    },
+    drop: (item: any) => {
+      if (item.player) {
+        movePlayer(item.player, courtId);
+      } else if (item.preset) {
+        // only add players that are not already on this court
+        const playersToAdd = item.preset.players.filter(
+          (p: Player) => !players.some((courtPlayer) => courtPlayer.name === p.name)
+        );
+
+        playersToAdd.forEach((player: Player) => {
+          movePlayer(player, courtId);
+        });
+
+        // remove the preset after dropping
+        removePreset(item.preset.id);
+      }
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
       canDrop: monitor.canDrop(),
     }),
   }));
+
 
   const ref = useRef<HTMLDivElement>(null);
   drop(ref); // attach drag target

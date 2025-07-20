@@ -9,3 +9,9 @@ export type Court = {
   court_number: number;
   players: Player[];
 };
+
+export interface Preset {
+  id: string;
+  name: string;
+  players: Player[];
+}

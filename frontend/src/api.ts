@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Player, Court } from "./types/types";
+import type { Player, Court, Preset } from "./types/types";
 
 const BASE_URL = import.meta.env.VITE_FASTAPI_URL || "http://localhost:5000";
 
@@ -40,4 +40,13 @@ export async function fetchCourts(): Promise<Court[]> {
 
 export async function incrementGamesPlayed(playerNames: string[]): Promise<void> {
   await axios.post(`${BASE_URL}/increment-games-played`, playerNames);
+}
+
+export async function fetchPresets(): Promise<Preset[]> {
+  const res = await axios.get(`${BASE_URL}/presets`);
+  return res.data;
+}
+
+export async function savePresets(presets: Preset[]): Promise<void> {
+  await axios.post(`${BASE_URL}/presets`, presets);
 }

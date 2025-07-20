@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Body
-from database import test_connection, players_collection, waiting_list_collection, courts_collection
-from models import Player, Court
+from pymongo import UpdateOne
+from database import test_connection, players_collection, waiting_list_collection, courts_collection, presets_collection
+from models import Player, Court, Preset
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List
@@ -67,12 +68,24 @@ async def save_waiting_list(waiting_list: list[Player]):
             unique.append(p.model_dump())
 
     try:
-        await waiting_list_collection.delete_many({})
         if unique:
-            result = await waiting_list_collection.insert_many(unique)
-            return {"inserted": len(result.inserted_ids)}
+            operations = [
+                UpdateOne(
+                    {"name": player["name"]},  # match by name
+                    {"$set": player},          # update full data
+                    upsert=True
+                )
+                for player in unique
+            ]
+
+            result = await waiting_list_collection.bulk_write(operations)
+            return {
+                "upserts": len(result.upserted_ids),
+                "modified": result.modified_count
+            }
         else:
-            return {"inserted": 0}
+            return {"upserts": 0, "modified": 0}
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to save waiting list: {e}")
 
@@ -80,19 +93,19 @@ async def save_waiting_list(waiting_list: list[Player]):
 
 @app.get("/waiting-list", response_model=list[Player])
 async def get_waiting_list():
-    waiting_cursor = waiting_list_collection.find()
+    waiting_cursor = waiting_list_collection.find().sort("order", 1)
     waiting_list = await waiting_cursor.to_list(length=None)
 
-    # Fetch all players from main collection to get games_played
+    # Add games_played from main players collection
     all_players = await players_collection.find().to_list(length=None)
     player_stats = {p["name"]: p.get("games_played", 0) for p in all_players}
 
-    # Merge games_played into waiting list players
     for player in waiting_list:
         player["_id"] = str(player["_id"])
         player["games_played"] = player_stats.get(player["name"], 0)
 
     return waiting_list
+
 
 @app.delete("/waiting-list/{player_name}")
 async def remove_from_waiting_list(player_name: str):
@@ -125,19 +138,40 @@ async def update_player_color(player_name: str, color: str = Body(..., embed=Tru
 
 @app.post("/courts")
 async def save_courts(courts: List[Court]):
-    await courts_collection.delete_many({})  # replace all
-    data = [
-        {
-            "id": str(court.id),
-            "court_number": court.court_number,
-            "players": [p.model_dump() for p in court.players]
-        }
+    incoming_ids = {str(court.id) for court in courts}
+    existing = await courts_collection.find().to_list(length=None)
+    existing_ids = {c.get("id") for c in existing}
+
+    ids_to_delete = existing_ids - incoming_ids
+
+    operations = [
+        UpdateOne(
+            {"id": str(court.id)},
+            {
+                "$set": {
+                    "id": str(court.id),
+                    "court_number": court.court_number,
+                    "players": [p.model_dump() for p in court.players],
+                }
+            },
+            upsert=True
+        )
         for court in courts
     ]
-    if data:
-        result = await courts_collection.insert_many(data)
-        return {"inserted": len(result.inserted_ids)}
-    return {"inserted": 0}
+
+    if ids_to_delete:
+        await courts_collection.delete_many({"id": {"$in": list(ids_to_delete)}})
+
+    if operations:
+        result = await courts_collection.bulk_write(operations)
+        return {
+            "upserts": len(result.upserted_ids),
+            "modified": result.modified_count,
+            "deleted": len(ids_to_delete)
+        }
+
+    return {"upserts": 0, "modified": 0, "deleted": len(ids_to_delete)}
+
 
 @app.get("/courts", response_model=List[Court])
 async def get_courts():
@@ -155,3 +189,47 @@ async def increment_games_played(players: list[str]):
             {"$inc": {"games_played": 1}}
         )
     return {"updated": len(players)}
+
+@app.get("/presets", response_model=List[Preset])
+async def get_presets():
+    presets = await presets_collection.find().sort("order", 1).to_list(length=None)
+    for p in presets:
+        p["_id"] = str(p["_id"])
+    return presets
+
+@app.post("/presets")
+async def save_presets(presets: List[Preset]):
+    try:
+        incoming_ids = {preset.id for preset in presets}
+        existing = await presets_collection.find().to_list(length=None)
+        existing_ids = {p.get("id") for p in existing}
+
+        ids_to_delete = existing_ids - incoming_ids
+
+        # Delete removed presets
+        if ids_to_delete:
+            await presets_collection.delete_many({"id": {"$in": list(ids_to_delete)}})
+
+        # Upsert current presets
+        operations = [
+            UpdateOne(
+                {"id": preset.id},
+                {"$set": preset.model_dump()},
+                upsert=True
+            )
+            for preset in presets
+        ]
+
+        if operations:
+            result = await presets_collection.bulk_write(operations)
+            return {
+                "upserts": len(result.upserted_ids),
+                "modified": result.modified_count,
+                "deleted": len(ids_to_delete)
+            }
+
+        return {"upserts": 0, "modified": 0, "deleted": len(ids_to_delete)}
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to save presets: {e}")
+

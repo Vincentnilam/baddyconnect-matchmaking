@@ -11,6 +11,7 @@ db = client["unitybc"]
 players_collection = db["players"]
 waiting_list_collection = db["waiting_list"]
 courts_collection = db["courts_collection"]
+presets_collection = db["presets_collection"]
 
 async def test_connection():
     doc = await players_collection.find_one()
