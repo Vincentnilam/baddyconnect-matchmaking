@@ -189,7 +189,7 @@ const App: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid gap-4 justify-center mb-8 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3">
+          <div className="grid gap-4 justify-center mb-8 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-2">
             {courts.map((court, i) => {
               const enrichedPlayers = court.players.map((p) => {
               const match = players.find((gp) => gp.name === p.name);
