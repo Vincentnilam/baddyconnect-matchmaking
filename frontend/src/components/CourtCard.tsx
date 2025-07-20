@@ -1,7 +1,7 @@
 import React , { useRef } from "react";
 import { useDrop } from "react-dnd";
 import PlayerCard from "./PlayerCard";
-import type { Player, Preset } from "../types/types";
+import type { Player } from "../types/types";
 
 interface CourtCardProps {
   courtId: string;
