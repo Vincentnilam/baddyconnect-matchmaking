@@ -21,7 +21,7 @@ const WaitingList: React.FC<Props> = ({ players, movePlayer, removeFromWaitingLi
 
   const handleRemove = async (id: string, name: string) => {
     try {
-      await removePlayerFromWaitingList(name);
+      await removePlayerFromWaitingList(id);
       removeFromWaitingList(id);
     } catch (err) {
       alert("Failed to delete player.");

@@ -21,8 +21,8 @@ export async function fetchWaitingList(): Promise<Player[]> {
   return res.data;
 }
 
-export async function removePlayerFromWaitingList(name: string): Promise<void> {
-  await axios.delete(`${BASE_URL}/waiting-list/${name}`);
+export async function removePlayerFromWaitingList(id: string): Promise<void> {
+  await axios.delete(`${BASE_URL}/waiting-list/${id}`);
 }
 
 export async function updatePlayerColor(name: string, color: string): Promise<void> {
