@@ -7,49 +7,44 @@ import { removePlayerFromWaitingList, updatePlayerColor } from "../api";
 interface Props {
   players: Player[];
   movePlayer: (player: Player, toCourtId?: string) => void;
-  removeFromWaitingList: (playerName: string) => void;
-  onChangeColor: (playerName: string, newColor: Player["color"]) => void;
+  removeFromWaitingList: (playerId: string) => void;
+  onChangeColor: (playerId: string, newColor: Player["color"]) => void;
 }
 
 const WaitingList: React.FC<Props> = ({ players, movePlayer, removeFromWaitingList, onChangeColor }) => {
   const [, drop] = useDrop(() => ({
     accept: "PLAYER",
-    drop: (item: { player: Player }) => {
-      movePlayer(item.player, undefined); // back to waiting list
-    },
+    drop: (item: { player: Player }) => movePlayer(item.player, undefined),
   }));
   const ref = useRef<HTMLDivElement>(null);
   drop(ref);
 
-  const handleRemove = async (name: string) => {
+  const handleRemove = async (id: string, name: string) => {
     try {
       await removePlayerFromWaitingList(name);
-      removeFromWaitingList(name);
+      removeFromWaitingList(id);
     } catch (err) {
       alert("Failed to delete player.");
     }
   };
 
-  const handleColorChange = async (name: string, newColor: Player["color"]) => {
+  const handleColorChange = async (id: string, name: string, newColor: Player["color"]) => {
     try {
       await updatePlayerColor(name, newColor);
-      onChangeColor(name, newColor);
+      onChangeColor(id, newColor);
     } catch (err) {
       alert("Failed to update color.");
     }
   };
 
   return (
-    <div
-      ref={ref}
-      className="bg-white text-black p-4 rounded shadow-lg max-w-md mx-auto"
-    >
+    <div ref={ref} className="bg-white text-black p-4 rounded shadow-lg max-w-md mx-auto">
       <h2 className="text-lg font-bold mb-2">Waiting List</h2>
       {players.length === 0 ? (
         <p className="text-gray-500 italic">No players waiting</p>
       ) : (
         players.map((player, idx) => (
-          <div key={player.name} className="flex items-center justify-between gap-2 mb-1">
+          <div key={player.id} className="flex items-center justify-between gap-2 mb-1">
             <div className="flex items-center gap-2 flex-1">
               <div className="text-sm font-mono w-5">{idx + 1}.</div>
               <PlayerCard player={player} />
@@ -57,14 +52,14 @@ const WaitingList: React.FC<Props> = ({ players, movePlayer, removeFromWaitingLi
             <select
               className="text-sm border rounded px-1 py-0.5"
               value={player.color}
-              onChange={(e) => handleColorChange(player.name, e.target.value as Player["color"])}
+              onChange={(e) => handleColorChange(player.id, player.name, e.target.value as Player["color"])}
             >
               <option value="Green">Green</option>
               <option value="Orange">Orange</option>
               <option value="Blue">Blue</option>
             </select>
             <button
-              onClick={() => handleRemove(player.name)}
+              onClick={() => handleRemove(player.id, player.name)}
               className="text-red-500 hover:text-red-700 text-sm"
               title="Remove player"
             >

@@ -5,13 +5,15 @@ from models import Player, Court, Preset
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List
+from uuid import uuid4
 
 # Create unique index on "name" field when app starts
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create unique index on "name"
     try:
-        await waiting_list_collection.create_index("name", unique=True)
+        await players_collection.create_index("id", unique=True)
+        await waiting_list_collection.create_index("id", unique=True)
         print("Unique index on 'name' ensured.")
         await courts_collection.create_index("court_number", unique=True)
         print("Unique index on 'court-number' ensured.")
@@ -49,43 +51,37 @@ async def get_players():
 
 @app.post("/players")
 async def add_player(player: Player):
-    # check if this name exists
-    existing = await players_collection.find_one({"name": player.name})
+    existing = await players_collection.find_one({"id": player.id})
     if existing:
-        raise HTTPException(status_code=400, detail="Player with this name already exists.")
-
+        raise HTTPException(status_code=400, detail="Player with this ID already exists.")
     result = await players_collection.insert_one(player.model_dump())
     return {"id": str(result.inserted_id), "message": "Player added"}
 
 @app.post("/waiting-list")
 async def save_waiting_list(waiting_list: list[Player]):
-    # De-duplicate incoming list by name
     seen = set()
     unique = []
     for p in waiting_list:
-        if p.name not in seen:
-            seen.add(p.name)
+        if p.id not in seen:
+            seen.add(p.id)
             unique.append(p.model_dump())
 
     try:
         if unique:
             operations = [
                 UpdateOne(
-                    {"name": player["name"]},  # match by name
-                    {"$set": player},          # update full data
+                    {"id": player["id"]},
+                    {"$set": player},
                     upsert=True
                 )
                 for player in unique
             ]
-
             result = await waiting_list_collection.bulk_write(operations)
             return {
                 "upserts": len(result.upserted_ids),
                 "modified": result.modified_count
             }
-        else:
-            return {"upserts": 0, "modified": 0}
-
+        return {"upserts": 0, "modified": 0}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to save waiting list: {e}")
 
@@ -95,45 +91,41 @@ async def save_waiting_list(waiting_list: list[Player]):
 async def get_waiting_list():
     waiting_cursor = waiting_list_collection.find().sort("order", 1)
     waiting_list = await waiting_cursor.to_list(length=None)
-
-    # Add games_played from main players collection
     all_players = await players_collection.find().to_list(length=None)
-    player_stats = {p["name"]: p.get("games_played", 0) for p in all_players}
+    player_stats = {p["id"]: p.get("games_played", 0) for p in all_players}
 
     for player in waiting_list:
         player["_id"] = str(player["_id"])
-        player["games_played"] = player_stats.get(player["name"], 0)
+        player["games_played"] = player_stats.get(player["id"], 0)
 
     return waiting_list
 
 
-@app.delete("/waiting-list/{player_name}")
-async def remove_from_waiting_list(player_name: str):
-    result = await waiting_list_collection.delete_one({"name": player_name})
+@app.delete("/waiting-list/{player_id}")
+async def remove_from_waiting_list(player_id: str):
+    result = await waiting_list_collection.delete_one({"id": player_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Player not found in waiting list")
-    return {"removed": player_name}
+    return {"removed": player_id}
 
-@app.patch("/waiting-list/{player_name}")
-async def update_player_color(player_name: str, color: str = Body(..., embed=True)):
+@app.patch("/waiting-list/{player_id}")
+async def update_player_color(player_id: str, color: str = Body(..., embed=True)):
     if color not in {"Green", "Orange", "Blue"}:
         raise HTTPException(status_code=400, detail="Invalid color")
 
     result = await waiting_list_collection.update_one(
-        {"name": player_name},
+        {"id": player_id},
         {"$set": {"color": color}}
     )
-
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Player not found in waiting list")
 
-    # also update in all players collection
     await players_collection.update_one(
-        {"name": player_name},
+        {"id": player_id},
         {"$set": {"color": color}}
     )
 
-    return {"updated": player_name, "new_color": color}
+    return {"updated": player_id, "new_color": color}
 
 
 @app.post("/courts")
@@ -233,3 +225,26 @@ async def save_presets(presets: List[Preset]):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to save presets: {e}")
 
+
+@app.get("/migrate-add-player-ids")
+async def migrate_add_player_ids():
+    collections = [
+        ("players", players_collection),
+        ("waiting_list", waiting_list_collection)
+    ]
+    updated_count = {}
+
+    for name, collection in collections:
+        docs = await collection.find({"id": {"$exists": False}}).to_list(length=None)
+        for doc in docs:
+            await collection.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {"id": str(uuid4())}}
+            )
+        updated_count[name] = len(docs)
+
+    return {
+        "status": "migration complete",
+        "players_updated": updated_count.get("players", 0),
+        "waiting_list_updated": updated_count.get("waiting_list", 0)
+    }

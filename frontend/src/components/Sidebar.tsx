@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getAllPlayers, addNewPlayer } from "../api";
 import type { Player } from "../types/types";
+import { v4 as uuidv4 } from "uuid";
 
 interface Props {
   onAddToWaitingList: (player: Player) => void;
@@ -16,7 +17,7 @@ const Sidebar: React.FC<Props> = ({ onAddToWaitingList }) => {
   }, []);
 
   const handleAdd = async () => {
-    const newPlayer = { name, color };
+    const newPlayer = { id: uuidv4(), name: name.trim(), color };
     try {
       await addNewPlayer(newPlayer);
       setAllPlayers((prev) => [...prev, newPlayer]);
@@ -32,26 +33,26 @@ const Sidebar: React.FC<Props> = ({ onAddToWaitingList }) => {
       <h2 className="text-lg font-bold mb-4">All Players</h2>
       <div className="space-y-2 mb-4">
         {allPlayers.map((player) => (
-            <div key={player.name} className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2">
-                <div
-                    className={`w-3 h-3 rounded-full ${
-                    player.color === "Green"
-                        ? "bg-green-500"
-                        : player.color === "Blue"
-                        ? "bg-blue-500"
-                        : "bg-orange-400"
-                    }`}
-                ></div>
-                <span>{player.name}</span>
-                </div>
-                <button
-                className="text-blue-500 text-xs"
-                onClick={() => onAddToWaitingList(player)}
-                >
-                ➕ Add
-                </button>
+          <div key={player.id} className="flex justify-between items-center text-sm">
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-3 h-3 rounded-full ${
+                  player.color === "Green"
+                    ? "bg-green-500"
+                    : player.color === "Blue"
+                    ? "bg-blue-500"
+                    : "bg-orange-400"
+                }`}
+              />
+              <span>{player.name}</span>
             </div>
+            <button
+              className="text-blue-500 text-xs"
+              onClick={() => onAddToWaitingList(player)}
+            >
+              ➕ Add
+            </button>
+          </div>
         ))}
       </div>
 

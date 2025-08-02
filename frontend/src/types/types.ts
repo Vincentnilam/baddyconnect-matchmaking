@@ -1,4 +1,5 @@
 export type Player = {
+  id: string;
   name: string;
   color: "Green" | "Orange" | "Blue";
   games_played?: number;

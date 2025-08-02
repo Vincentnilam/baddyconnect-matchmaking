@@ -13,40 +13,33 @@ const App: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
-  
-  const assignedNames = new Set([
-    ...courts.flatMap((c) => c.players.map((p) => p.name)),
-    ...presets.flatMap((p) => p.players.map((p) => p.name)),
-  ]);
-
-  const waitingList = players.filter((p) => !assignedNames.has(p.name));
   const [initialized, setInitialized] = useState(false);
-  
 
-  // First load fetch
+  const assignedIds = new Set([
+    ...courts.flatMap((c) => c.players.map((p) => p.id)),
+    ...presets.flatMap((p) => p.players.map((p) => p.id)),
+  ]);
+  const waitingList = players.filter((p) => !assignedIds.has(p.id));
+
   useEffect(() => {
     const load = async () => {
       const list = await fetchWaitingList();
       setPlayers(list);
+
       const loadedCourts = await fetchCourts();
-      // Filter out any malformed courts (e.g., missing court_number or no players array)
       const validCourts = loadedCourts
         .filter(court => typeof court.court_number === "number" && Array.isArray(court.players))
         .map(court => ({
           id: court.id,
           court_number: court.court_number,
-          players: court.players.filter(p => p.name), // remove players without names
+          players: court.players.filter(p => p.id),
         }));
 
-      // If no valid courts found, add an empty one
-      if (validCourts.length === 0) {
-        setCourts([{ id: uuidv4(), court_number: 0, players: [] }]);
-      } else {
-        setCourts(validCourts);
-      }
+      setCourts(validCourts.length > 0 ? validCourts : [{ id: uuidv4(), court_number: 0, players: [] }]);
 
       const presetList = await fetchPresets();
       setPresets(presetList);
+
       setInitialized(true);
     };
     load();
@@ -55,65 +48,53 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!initialized) return;
 
-    const assigned = new Set(courts.flatMap((court) => court.players.map((p) => p.name)));
-    const unassigned = players.filter((p) => !assigned.has(p.name));
+    const assigned = new Set(courts.flatMap((court) => court.players.map((p) => p.id)));
+    const unassigned = players.filter((p) => !assigned.has(p.id));
 
-    const uniqueNames = new Set();
+    const uniqueIds = new Set();
     const unique = unassigned.filter((p) => {
-      if (uniqueNames.has(p.name)) return false;
-      uniqueNames.add(p.name);
+      if (uniqueIds.has(p.id)) return false;
+      uniqueIds.add(p.id);
       return true;
     });
 
     const waitingListwithOrder = unique.map((p, i) => ({ ...p, order: i }));
     saveWaitingList(waitingListwithOrder);
-
     saveCourts(courts);
-    const withOrder = presets.map((p, i) => ({ ...p, order: i }));
-    savePresets(withOrder);
+    savePresets(presets.map((p, i) => ({ ...p, order: i })));
   }, [players, courts, presets, initialized]);
 
-
   const addCourt = () => {
-    setCourts((prev) => [
-      ...prev,
-      { id: uuidv4() ,court_number: prev.length, players: [] }
-    ]);
+    setCourts((prev) => [...prev, { id: uuidv4(), court_number: prev.length, players: [] }]);
   };
-
 
   const removeCourt = (courtId: string) => {
     setCourts((prev) => {
       const updated = prev.filter(c => c.id !== courtId);
-      saveCourts(updated); // persist immediately
+      saveCourts(updated);
       return updated;
     });
   };
 
-
   const onFinishCourt = (courtId: string) => {
-  const playersToMove = courts.find(c => c.id === courtId)?.players ?? [];
-  const namesToMove = new Set(playersToMove.map(p => p.name));
+    const playersToMove = courts.find(c => c.id === courtId)?.players ?? [];
+    const idsToMove = new Set(playersToMove.map(p => p.id));
 
-  // Update local players with +1 games_played and put them at the end
-  setPlayers((prev) => {
-      const others = prev.filter((p) => !namesToMove.has(p.name));
+    setPlayers((prev) => {
+      const others = prev.filter((p) => !idsToMove.has(p.id));
       const updatedReturning = playersToMove.map((p) => {
-        const current = prev.find(pp => pp.name === p.name);
+        const current = prev.find(pp => pp.id === p.id);
         return {
           ...p,
           color: current?.color || p.color || "Green",
           games_played: (current?.games_played ?? 0) + 1,
         };
       });
-
-      return [...others, ...updatedReturning]; //  ensures returning players are last
+      return [...others, ...updatedReturning];
     });
 
-    // Update DB
     incrementGamesPlayed(playersToMove.map(p => p.name));
 
-    // Clear the court
     setCourts((prevCourts) =>
       prevCourts.map((court) =>
         court.id === courtId ? { ...court, players: [] } : court
@@ -121,63 +102,47 @@ const App: React.FC = () => {
     );
   };
 
-
-
   const movePlayer = (player: Player, toCourtId?: string) => {
-    // Ensure the player exists in global state
-    setPlayers((prevPlayers) => {
-      const alreadyIn = prevPlayers.some((p) => p.name === player.name);
-      const without = prevPlayers.filter((p) => p.name !== player.name);
-      if (!alreadyIn) {
-        return [...without, player];
-      }
+    setPlayers((prev) => {
+      const without = prev.filter((p) => p.id !== player.id);
       return toCourtId ? without : [...without, player];
     });
 
     setCourts((prevCourts) => {
-      let updatedCourts = prevCourts.map((court) => ({
+      let updated = prevCourts.map((court) => ({
         ...court,
-        players: court.players.filter((p) => p.name !== player.name),
+        players: court.players.filter((p) => p.id !== player.id),
       }));
 
-      if (!toCourtId) return updatedCourts;
+      if (!toCourtId) return updated;
 
-      const court = updatedCourts.find((c) => c.id === toCourtId);
-      if (!court || court.players.length >= 4 || court.players.some(p => p.name === player.name)) return updatedCourts;
+      const court = updated.find((c) => c.id === toCourtId);
+      if (!court || court.players.length >= 4 || court.players.some(p => p.id === player.id)) return updated;
 
       court.players.push(player);
-      return [...updatedCourts];
+      return [...updated];
     });
   };
 
-
-
-
-  const removeFromWaitingList = (playerName: string) => {
-    setPlayers((prev) => prev.filter((p) => p.name !== playerName));
+  const removeFromWaitingList = (playerId: string) => {
+    setPlayers((prev) => prev.filter((p) => p.id !== playerId));
   };
 
-  const onChangeColor = (playerName: string, newColor: Player["color"]) => {
-    setPlayers((prev) =>
-      prev.map((p) =>
-        p.name === playerName ? { ...p, color: newColor } : p
-      )
-    );
+  const onChangeColor = (playerId: string, newColor: Player["color"]) => {
+    setPlayers((prev) => prev.map((p) => p.id === playerId ? { ...p, color: newColor } : p));
   };
 
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="flex min-h-screen bg-gradient-to-r from-purple-700 to-blue-500 text-white">
-        {/* Left Sidebar */}
         <Sidebar
           onAddToWaitingList={(player) =>
             setPlayers((prev) =>
-              prev.find((p) => p.name === player.name) ? prev : [...prev, player]
+              prev.some((p) => p.id === player.id) ? prev : [...prev, player]
             )
           }
         />
 
-        {/* Main Court Area */}
         <div className="flex-1 p-6">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold">Unity Matchmaker</h1>
@@ -192,13 +157,13 @@ const App: React.FC = () => {
           <div className="grid gap-4 justify-center mb-8 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-2">
             {courts.map((court, i) => {
               const enrichedPlayers = court.players.map((p) => {
-              const match = players.find((gp) => gp.name === p.name);
-              return {
-                ...p,
-                color: match?.color || p.color || "Green",
-                games_played: match?.games_played ?? p.games_played ?? 0,
-              };
-            });
+                const match = players.find((gp) => gp.id === p.id);
+                return {
+                  ...p,
+                  color: match?.color || p.color || "Green",
+                  games_played: match?.games_played ?? p.games_played ?? 0,
+                };
+              });
 
               return (
                 <CourtCard
@@ -216,16 +181,15 @@ const App: React.FC = () => {
               );
             })}
           </div>
-          {/* preset lsit */}
+
           <PresetList
-              presets={presets}
-              setPresets={setPresets}
-              waitingList={waitingList}
-              setPlayers={setPlayers}
+            presets={presets}
+            setPresets={setPresets}
+            waitingList={waitingList}
+            setPlayers={setPlayers}
           />
         </div>
 
-        {/* Right Waiting List */}
         <div className="w-80 p-4">
           <WaitingList
             players={waitingList}
@@ -235,7 +199,6 @@ const App: React.FC = () => {
           />
         </div>
       </div>
-
     </DndProvider>
   );
 };
