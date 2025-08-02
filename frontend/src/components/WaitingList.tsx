@@ -19,7 +19,7 @@ const WaitingList: React.FC<Props> = ({ players, movePlayer, removeFromWaitingLi
   const ref = useRef<HTMLDivElement>(null);
   drop(ref);
 
-  const handleRemove = async (id: string, name: string) => {
+  const handleRemove = async (id: string) => {
     try {
       await removePlayerFromWaitingList(id);
       removeFromWaitingList(id);
@@ -59,7 +59,7 @@ const WaitingList: React.FC<Props> = ({ players, movePlayer, removeFromWaitingLi
               <option value="Blue">Blue</option>
             </select>
             <button
-              onClick={() => handleRemove(player.id, player.name)}
+              onClick={() => handleRemove(player.id)}
               className="text-red-500 hover:text-red-700 text-sm"
               title="Remove player"
             >
